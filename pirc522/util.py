@@ -45,6 +45,8 @@ class RFIDUtil(object):
         Sets authentication info for current tag
         """
         self.method = auth_method
+        if isinstance(key, str):
+            key = bytes.fromhex(key)
         self.key = key
 
         if self.debug:
@@ -131,9 +133,13 @@ class RFIDUtil(object):
         error = self.do_auth(block_address)
         if not error:
             (error, data) = self.rfid.read(block_address)
-            print(self.sector_string(block_address) + ": " + str(data))
+            if self.debug:
+                print(self.sector_string(block_address) + ": " + str(data))
+            return error, data
         else:
-            print("Error on " + self.sector_string(block_address))
+            if self.debug:
+                print("Error on " + self.sector_string(block_address))
+            return error, None
 
     def dump(self, sectors=16):
         for i in range(sectors * 4):

@@ -91,6 +91,16 @@ class RFID(object):
         else:
             self.clear_bitmask(self.reg_tx_control, 0x03)
 
+    def checksum(self, uid):
+        """
+        returns the exclusive-or value of each byte in uid
+        uid -- list or tuple with four bytes tag ID
+        """
+        val = 0
+        for i in uid:
+            val ^= i
+        return val
+
     def card_write(self, command, data):
         back_data = []
         back_length = 0
@@ -183,8 +193,6 @@ class RFID(object):
         back_data = []
         serial_number = []
 
-        serial_number_check = 0
-
         self.dev_write(0x0D, 0x00)
         serial_number.append(self.act_anticl)
         serial_number.append(0x20)
@@ -192,10 +200,10 @@ class RFID(object):
         (error, back_data, back_bits) = self.card_write(self.mode_transrec, serial_number)
         if not error:
             if len(back_data) == 5:
-                for i in range(4):
-                    serial_number_check = serial_number_check ^ back_data[i]
+                *back_data, check = back_data
+                serial_number_check = self.checksum(back_data)
 
-                if serial_number_check != back_data[4]:
+                if serial_number_check != check:
                     error = True
             else:
                 error = True
@@ -235,12 +243,12 @@ class RFID(object):
         buf.append(self.act_select)
         buf.append(0x70)
 
-        for i in range(5):
-            buf.append(uid[i])
+        buf.extend(uid)
+        check = self.checksum(uid)
+        buf.append(check) # check
 
         crc = self.calculate_crc(buf)
-        buf.append(crc[0])
-        buf.append(crc[1])
+        buf.extend(crc)
 
         (error, back_data, back_length) = self.card_write(self.mode_transrec, buf)
 
@@ -261,11 +269,10 @@ class RFID(object):
         buf.append(auth_mode)
         buf.append(block_address)
 
-        for i in range(len(key)):
-            buf.append(key[i])
+        buf.extend(key)
 
-        for i in range(4):
-            buf.append(uid[i])
+        for b in uid:
+            buf.append(b)
 
         (error, back_data, back_length) = self.card_write(self.mode_auth, buf)
         if not (self.dev_read(0x08) & 0x08) != 0:
@@ -288,7 +295,6 @@ class RFID(object):
         buf.append(self.act_end)
         buf.append(0)
 
-        crc = self.calculate_crc(buf)
         self.clear_bitmask(0x08, 0x80)
         self.card_write(self.mode_transrec, buf)
         self.clear_bitmask(0x08, 0x08)
@@ -303,8 +309,7 @@ class RFID(object):
         buf.append(self.act_read)
         buf.append(block_address)
         crc = self.calculate_crc(buf)
-        buf.append(crc[0])
-        buf.append(crc[1])
+        buf.extend(crc)
         (error, back_data, back_length) = self.card_write(self.mode_transrec, buf)
 
         if len(back_data) != 16:
@@ -321,8 +326,7 @@ class RFID(object):
         buf.append(self.act_write)
         buf.append(block_address)
         crc = self.calculate_crc(buf)
-        buf.append(crc[0])
-        buf.append(crc[1])
+        buf.extend(crc)
         (error, back_data, back_length) = self.card_write(self.mode_transrec, buf)
         if not(back_length == 4) or not((back_data[0] & 0x0F) == 0x0A):
             error = True
@@ -333,8 +337,7 @@ class RFID(object):
                 buf_w.append(data[i])
 
             crc = self.calculate_crc(buf_w)
-            buf_w.append(crc[0])
-            buf_w.append(crc[1])
+            buf_w.extend(crc)
             (error, back_data, back_length) = self.card_write(self.mode_transrec, buf_w)
             if not(back_length == 4) or not((back_data[0] & 0x0F) == 0x0A):
                 error = True
